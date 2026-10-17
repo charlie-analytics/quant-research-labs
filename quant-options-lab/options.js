@@ -1,0 +1,9 @@
+(function(root){'use strict';const f=Number.isFinite,pdf=x=>Math.exp(-x*x/2)/Math.sqrt(2*Math.PI);function cdf(x){const z=Math.abs(x),t=1/(1+.2316419*z),a=t*(.319381530+t*(-.356563782+t*(1.781477937+t*(-1.821255978+t*1.330274429)))),v=1-pdf(z)*a;return x>=0?v:1-v;}
+function checked(result){if(!Object.values(result).every(x=>x===null||f(x)))throw Error('Option model exceeds finite calculation range');return result;}
+function payoff(value){if(!f(value))throw Error('Option model exceeds finite calculation range');return Math.max(0,value);}
+function price(S,K,T,sigma,r=0,q=0,type='call'){if(![S,K,T,sigma,r,q].every(f)||S<=0||K<=0||T<0||T>20||sigma<0||sigma>5||Math.abs(r)>1||q<0||q>1||!['call','put'].includes(type))throw Error('Model needs positive spot/strike, 0–20 years, 0–500% volatility, rate within ±100%, and 0–100% dividend yield');const call=type==='call',sign=call?1:-1;
+ if(T===0)return checked({value:payoff(sign*(S-K)),delta:null,gamma:null,vega:null,theta:null,rho:null});const ds=Math.exp(-q*T),dk=Math.exp(-r*T);
+ if(sigma===0)return checked({value:payoff(sign*(S*ds-K*dk)),delta:null,gamma:null,vega:null,theta:null,rho:null});
+ const d1=(Math.log(S/K)+(r-q+sigma*sigma/2)*T)/(sigma*Math.sqrt(T)),d2=d1-sigma*Math.sqrt(T);const value=call?S*ds*cdf(d1)-K*dk*cdf(d2):K*dk*cdf(-d2)-S*ds*cdf(-d1);const theta=(-S*ds*pdf(d1)*sigma/(2*Math.sqrt(T))+(call?-r*K*dk*cdf(d2)+q*S*ds*cdf(d1):r*K*dk*cdf(-d2)-q*S*ds*cdf(-d1)))/365;
+ const result={value:payoff(value),delta:call?ds*cdf(d1):ds*(cdf(d1)-1),gamma:ds*pdf(d1)/(S*sigma*Math.sqrt(T)),vega:S*ds*pdf(d1)*Math.sqrt(T)/100,theta,rho:sign*K*T*dk*cdf(sign*d2)/100};return checked(result);}
+const api={price,cdf};if(typeof module!=='undefined')module.exports=api;else root.IndiaOptions=api;})(typeof window!=='undefined'?window:globalThis);

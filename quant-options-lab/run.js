@@ -1,0 +1,7 @@
+const fs=require('node:fs'),crypto=require('node:crypto');const l=require('./lab');const m=require('./options');
+const out=process.argv[2];if(!out||fs.existsSync(out))throw Error('New output directory required');fs.mkdirSync(out,{recursive:true});
+const results={classification:'SYNTHETIC_ASSUMPTIONS_NOT_MARKET_QUOTES',baseline:l.scenario(),grid:[]};
+for(const type of ['call','put'])for(const days of [0,7,30])for(const vol of [0,.15,.4,.8])results.grid.push(l.scenario(104,days,vol,type));
+fs.writeFileSync(out+'/results.json',JSON.stringify(results,null,2)+'\n');const hash=p=>crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex');
+const manifest={classification:results.classification,node:process.version,model:'Reused India European BSM implementation; unchanged',model_sha256:hash('options.js'),tests:19,grid_scenarios:results.grid.length,results_sha256:hash(out+'/results.json'),source_sha256:Object.fromEntries(['options.js','lab.js','test_lab.js','run.js'].map(p=>[p,hash(p)])),units:{vega:'value per 1 percentage point volatility',rho:'value per 1 percentage point rate',theta:'value per calendar day',delta:'value per unit underlying',gamma:'delta per unit underlying'}};
+fs.writeFileSync(out+'/manifest.json',JSON.stringify(manifest,null,2)+'\n');console.log(JSON.stringify({baseline_pnl:results.baseline.pnl,grid_scenarios:results.grid.length,results_sha256:manifest.results_sha256},null,2));
