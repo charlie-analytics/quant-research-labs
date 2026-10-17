@@ -1,0 +1,111 @@
+FOUR QUANT LABS — NUMERICAL WALKTHROUGH
+Prepared 17 October 2026. These are research demonstrations, not professional HFT experience, validated trading strategies or live-capital results. Read the input classification before reading a number.
+
+1. BACKTEST VALIDITY
+Public: https://charliequantlab.com/Backtest_Validity
+Question: does a historical signal survive honest clocks, costs and removal of its biggest result?
+
+Inputs: reused daily cached OHLCV (open, high, low, close, volume), not a new independent dataset. Frozen completed input: 104,112 rows, 60 symbols, 1 Jan 2019–16 Oct 2026. Fifty-nine current-day rows were excluded. Original retrieval receipts and exact instrument-history provenance are absent. Input hash: 124976bd1cabc1519713a2329c94953af9597cc5413d151c26d596a1780a1fb4. No raw history is in the public source release.
+
+A 20-day momentum score is (latest completed close / close 20 dates earlier − 1) × 100. Every seventh date forms a signal. Each annual training fold chooses high- or low-score ranking from outcomes available before that year's January 1. Labels reaching the boundary are purged: you cannot train on an outcome not yet known. The selected top three enter at the next daily open and exit at the close five dates after entry. That spans six daily candles, not five close-to-close returns. At least eight eligible assets and a complete holding path are required. The equal-weight benchmark uses the same entry/exit clocks and signal-time eligible universe. Rejecting incomplete dates may itself induce selection bias.
+
+Per-position gross return = (exit / entry − 1) × 100. Net percentage return = gross − round-trip basis points / 100. Basket return is the equal average of three positions. The saved run contains 735 selected positions grouped into 245 date baskets; these are not 735 independent bets. Returns are an event study, not compounded account equity.
+
+Controlled change — cost only: hold selections fixed, raise assumed round-trip costs from 25 to 100 basis points. Expected: every event loses another 0.75 percentage points; rankings and event count stay fixed. Actual mean basket net return changes from 2.422022348% to 1.672022348%. The arithmetic meets expectation. Baseline median is only 0.010415544%, 122 of 245 baskets lose, worst basket is −31.78898827%. A positive mean is not enough to demonstrate an edge.
+
+Outlier removal: the best basket is 308.043529%; removing it lowers mean net basket return to 1.169475188%. Its TUTUSDT component has cached entry open 0.02038 and exit close 0.20144: (0.20144 / 0.02038 − 1) × 100 = 888.4200196% gross, 888.1700196% net at 25 bps. Adjacent cached candles show a multiday rise/reversal; this proves the cache's internal arithmetic, not authentic or executable prices. Do not call it a proven typo, market event or profitable trade.
+
+Pass: 11 synthetic fixture tests check clocks, labels, gaps, matched benchmarks, cost arithmetic and outlier sensitivity. Research verdict: SOURCE VALIDATION OPEN. Reused history is retrospective; survivorship, dependent observations, tuning, liquidity, execution and source authenticity remain unresolved. No confidence interval, Sharpe or hit-rate/profitability claim follows.
+
+Revision: change one declared assumption, create a new output directory, retain prior results and compare. Supply only your own permitted correctly indexed daily history. Never overwrite observations to improve results.
+
+2. ORDER BOOK AND EXECUTION
+Public: https://charliequantlab.com/Order_Book_Execution
+Question: what must happen between deciding to quote and actually receiving a fill?
+
+Inputs: six hand-written synthetic event tapes; price is integer ticks with tick value one, size is integer units, time is hypothetical microseconds. Submit/cancel delay is assumed 1, 5 or 15; cancellation policy is conservative or optimistic; allocation is FIFO or simplified pro-rata. Six × three × two × two = 72 configurations. Fee assumption is one basis point and inventory cap five units. These are neither measured exchange/network latencies nor calibrated venue rules.
+
+An order may rest only after its modeled arrival. At equal timestamps the input tape/decision precedes a modeled arrival; the tape wins a same-time cancel race. FIFO fills require queue-ahead consumption first. Conservative depth cancellation leaves queue-ahead unchanged; optimistic cancellation assumes removed depth was ahead. Neither resolves hidden order identity. Simplified pro-rata uses integer allocation and is not a complete venue specification. One active own order per side is supported at the current best price; deeper quoting is rejected. A feed gap invalidates queue/accounting completeness.
+
+Controlled change — delay only: in late_order_misses_trade, submit at time 1, trade at time 3. At delay 5 the order arrives at 6 and misses the trade: zero filled units. At delay 1 it arrives at 2: three units fill. Expected and actual agree. This is a deliberately constructed causal fixture, not an empirical claim that shaving four microseconds buys three real units.
+
+Queue uncertainty example: depth_cancellation_uncertain fills zero under conservative cancellation and three under optimistic cancellation. The difference is an assumption range, not a choice of which result to advertise.
+
+Accounting example — queue_then_partial: buy two units at time 12 and one at 14, each at 99. Notional 297; fee = 297 × 1 / 10,000 = 0.0297. Final inventory is three. At final mid 98, marked value is 294; P&L = −297 − 0.0297 + 294 = −3.0297. Cash, remaining quantity, fills, fees and inventory reconcile after every partial fill. An unfilled quantity is not a loss or a successful prediction; it is a missed modeled fill. A cancel request does not remove an order until arrival.
+
+Markout = signed quantity × (later mid − fill price), with buy sign positive and sell sign negative. Negative is adverse price movement after the fill. The first observed mid at/after the requested horizon is used and its actual delay is disclosed; no observation means unknown. This differs from final marked P&L and excludes fees unless stated.
+
+Pass: 26 tests verify queue mechanics, partial fills, cancel races, allocation assumptions, fee/inventory arithmetic, caps, gaps and markout signs. Seventy-two configurations are examples, not independent market tests. The separate 1,000-run host benchmark measured a tiny Python replay (median 17.456 microseconds, p95 38.758 in the earlier saved environment); it excludes feed, network, serialization and exchange processing. It proves no HFT capability. A private three-file real-book parser smoke test was never used to simulate fills or calibrate latency, and neither data nor parser is released here.
+
+Revision: first add a hand-calculated failing fixture for the new behavior, then alter engine.py and rerun all tests. Keep negative examples and uncertainty ranges. Do not tune toward positive P&L.
+
+3. OPTIONS AND VOLATILITY
+Public: https://charliequantlab.com/Options_Volatility
+Question: why can a directionally correct underlying view lose money on an option?
+
+Inputs: spot S, strike K, days to expiry, annual volatility sigma, annual continuously compounded rate r, dividend yield q and call/put type. These are assumptions; there are no observed implied-volatility quotes. The existing India European Black–Scholes–Merton model is reused unchanged. Time T = days / 365.
+
+d1 = [ln(S/K) + (r − q + sigma²/2)T] / (sigma × sqrt(T)); d2 = d1 − sigma × sqrt(T).
+Call value = S exp(−qT) N(d1) − K exp(−rT) N(d2).
+Put value = K exp(−rT) N(−d2) − S exp(−qT) N(−d1).
+N is the implemented approximate standard-normal CDF. Expiry uses intrinsic value. Zero-volatility uses the deterministic discounted payoff; unavailable boundary Greeks stay null.
+
+Entry: S=100, K=100, 30 days, sigma=40%, r=3%, q=0, call. Model premium 4.690995102457563. Later assumed state: S=104, seven days left, sigma=15%. Model value 4.0799854214060645; one-unit theoretical P&L = 4.0799854214060645 − 4.690995102457563 = −0.6110096810514989. The underlying is up four, but the option lost value as time and assumed volatility fell. At expiry with spot 104, payoff is max(104−100,0)=4, P&L −0.690995102457563. Interim theoretical value and expiry payoff are different objects.
+
+Controlled change — current volatility only: keep entry premium, current spot 104 and remaining seven days fixed, raise current assumed volatility from 15% to 40%. Expected: greater European option time value. Actual value 4.839384150737288; P&L +0.148389048279725. The numerical direction meets expectation. No market implied-volatility surface or executable premium is implied.
+
+Payoff for several legs: sum of signed quantity × (terminal intrinsic − paid premium), minus explicit supplied costs. A long leg has positive quantity, a short leg negative. Contract multiplier is not silently inferred. Delta is value change per underlying unit; gamma is delta change per underlying unit; vega is value change per ONE percentage point of volatility; rho is value change per ONE percentage point of rate; theta is value change per calendar day. A decimal volatility change 0.01 is one percentage point, not one percent of the existing volatility. Local sensitivities approximate small changes and do not price large jumps exactly.
+
+Pass: 19 tests include reference call 10.450583572 and put 5.57352602 under the standard S=K=100, T=1, sigma=20%, r=5%, q=0 example; dividend put-call parity; finite-difference Greeks; expiry/zero-volatility; bounds; scale invariance; spread/leg payoff; invalid input/overflow and the right-direction loss. Twenty-four parameter configurations span call/put, 0/7/30 days and 0/15/40/80% volatility. Passing verifies numerical contracts, not future accuracy or a profitable options strategy.
+
+Limits: European constant-parameter model, no American exercise, smile/surface calibration, stochastic volatility, spread, discrete dividend schedule, margin, settlement, tax or liquidity model. Price units remain model units.
+
+Revision: retain model provenance and units, add an objective numerical regression before altering formulas, and compare new named runs without replacing the old one.
+
+4. PORTFOLIO RISK
+Public: https://charliequantlab.com/Portfolio_Risk
+Question: why are capital concentration and return-risk concentration different?
+
+Inputs: initial asset-A weight (B=1−A), constructed return correlation, daily frequency, two invented paths and a fictional benchmark. Each asset's sample daily return standard deviation is 1.5%. Deterministic centered/normalized waves are orthogonalized to construct the requested correlation; they are not real returns or random forecasts. There are 253 synthetic weekday closes producing 252 consecutive one-session returns. Weekdays are not a genuine exchange holiday calendar. Run-file baseline correlation is 0.2; the public page intentionally starts at 0 for the controlled comparison below.
+
+Return r_t = price_t / price_(t−1) − 1, in decimals. Sample covariance = sum[(a_t−mean(a))(b_t−mean(b))] / (n−1). Correlation = covariance / (standard deviation A × standard deviation B), undefined when either variance is zero. Both diagonal covariance entries are 0.000225. At correlation 0 the off-diagonal is zero; at 0.9 it is 0.0002025.
+
+Initial allocation is buy-and-hold, so exposure drifts as prices move. Portfolio daily return comes from its normalized value path. Annualized volatility = sqrt(sample daily portfolio variance × 252). The familiar w' covariance w formula applies to fixed daily weights; this engine attributes the actual drifting buy-and-hold daily components instead of silently assuming daily rebalancing.
+
+Controlled change — correlation only: initial A/B weights stay 60%/40%. At correlation zero, volatility is 0.17277246984751582 = 17.2772469848% annually; closing drawdown −12.3194734570%. At correlation 0.9, volatility is 0.23233471466474007 = 23.2334714665%; drawdown −14.4181417020%. Expected less diversification and greater variation; actual direction agrees for these paths. This is not a universal drawdown monotonicity theorem.
+
+Capital HHI = 0.6² + 0.4² = 0.52 at both correlations; effective holdings = 1/0.52 = 1.923076923. These measure starting money concentration, not covariance or loss probability. Variance share = covariance(each holding's drifting daily return component, portfolio return) / portfolio variance. At zero correlation A contributes 71.6821906838%, B 28.3178093162%; at 0.9 A contributes 60.5230509760%, B 39.4769490240%. Shares sum to 100%. Negative contributions, if present, are retained.
+
+Drawdown = minimum(value_t / highest closing value through t − 1). It is nonpositive; a test path 100→120→90→110 gives −25%, because 90/120−1=−0.25. It does not measure the worst intraday decline. Beta = covariance(portfolio, benchmark) / benchmark variance; no benchmark variation means undefined, not zero. The original India CAPM view separately uses assumed annual INR risk-free return + beta × (assumed annual market return − assumed annual risk-free return). CAPM is not a future-return guarantee and is not added as a new feature to this focused risk page.
+
+Missing-data rules: returns are formed only between consecutive declared sessions. Removing one interior close removes TWO adjacent one-session returns: 252 becomes 250. It does not turn the gap into a daily two-session return. Missing endpoints, duplicates, invalid dates and mixed adjustment treatment fail. A 252-session window needs 200 valid returns; a 63-session window needs 50; the 21-session view withholds risk estimates. Complete-case sampling can still bias results. Weekly/hourly/overlapping-horizon inputs are rejected by the wrapper rather than annualized as daily data.
+
+Same-date fund overlap = sum of minimum disclosed weights by matched ISIN. A numerical fixture totals 0.4 = 40%; different disclosure dates fail. This is overlap among observed holdings, not evidence about missing constituents. It is tested helper behavior, not a claim of current fund ownership on the public risk page.
+
+Pass: 24 tests cover covariance units, symmetry, daily/annual scaling, frequency rejection, variance-share reconciliation, concentration, constructed correlation, diagonal matrix, price scaling, missingness, sample gates, constant benchmark/assets, weights, drawdown, overlap and deterministic reruns. Twenty weight/correlation combinations are examples, not strategies. No tail calibration, fees, liquidity, taxes, leverage, regime stability or future-performance claim follows.
+
+WHAT PASS, FAIL AND MISS MEAN
+A test pass means the implementation matched a specified fixture or numerical tolerance. A test failure means investigate the implementation or stated contract before publication. An unavailable result means the required input/observation is absent; do not substitute zero. A missed fill is a modeled nonexecution. A losing return is an experiment outcome, not automatically a software fault. A statistical claim needs separate data provenance and methodology; passing code tests cannot supply them.
+
+GLOSSARY
+Basis point: 0.01 percentage point; 25 bps = 0.25 percentage point.
+OHLCV: open, high, low, close and volume for a candle.
+Look-ahead/leakage: using information before it would actually be available.
+Purging: excluding training labels whose outcomes extend into the next evaluation period.
+Retrospective: designed/reviewed using already available history; not untouched prospective evidence.
+Survivorship: the retained universe may omit failed/delisted instruments.
+FIFO/queue ahead: earlier resting orders get priority before your order.
+Latency: delay between a modeled decision and its modeled arrival; assumed here.
+Markout: signed later-mid movement after a fill; not the same as realized P&L.
+Implied volatility: volatility inferred from an observed option price; this lab uses assumptions instead.
+Greek: a local model sensitivity to one input.
+Covariance: co-variation of returns, in squared decimal-return units here.
+Correlation: normalized co-variation; not causation.
+HHI: sum of squared capital weights; not risk contribution.
+Beta: historical sensitivity to a selected benchmark; not alpha or a forecast.
+Drawdown: decline from a previous peak over the sampled value path.
+Fixture: deliberately controlled data with an expected answer.
+Manifest/hash: saved run metadata/fingerprint supporting reproducibility, not source authenticity.
+
+RECEIPTS AND REPRODUCTION
+Public source includes only calculation/test/runner files, synthetic fixtures and guides. Private delivery includes publication receipts and test evidence. Public backtest historical aggregates cannot be independently reproduced from this repository because raw cached history is deliberately not distributed. Source provenance for that dataset remains unresolved. Re-run Python and Node tests in their separate lab folders with existing dependencies; never install packages merely to make a claim appear validated. Generate runs into fresh directories. Keep public deployment receipts separate from public source because they include private server paths.
